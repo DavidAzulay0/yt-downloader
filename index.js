@@ -54,7 +54,7 @@ app.post("/download", async (req, res) => {
 });
 
 app.get("/health", (_, res) => {
-  res.send("ok");
+  res.json({ status: "ok" });
 });
 
 app.listen(3000, () => {
