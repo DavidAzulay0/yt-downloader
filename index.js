@@ -8,55 +8,99 @@ app.use(express.json());
 
 const TMP_DIR = "/tmp";
 
-app.post("/download", async (req, res) => {
+/**
+ * Root (opcional, só para sanity check)
+ */
+app.get("/", (_, res) => {
+  res.send("yt-downloader running");
+});
+
+/**
+ * Health check (usado pelo n8n)
+ */
+app.get("/health", (_, res) => {
+  res.json({
+    status: "ok",
+    service: "yt-downloader",
+    timestamp: new Date().toISOString(),
+  });
+});
+
+/**
+ * Download endpoint
+ * Recebe: { url: "https://youtube.com/..." }
+ * Retorna: { status, fileName, filePath }
+ */
+app.post("/download", (req, res) => {
   const { url } = req.body;
 
   if (!url) {
     return res.status(400).json({ error: "url is required" });
   }
 
-  const output = `${TMP_DIR}/video-%(id)s.%(ext)s`;
+  // nome previsível para facilitar leitura posterior
+  const outputTemplate = `${TMP_DIR}/video-%(id)s.%(ext)s`;
 
-  const command = `
-    yt-dlp \
-    -f "bestvideo[height<=360]+bestaudio/best[height<=360]" \
-    --merge-output-format mp4 \
-    -o "${output}" \
-    "${url}"
-  `;
+  // ⚠️ comando em UMA linha (evita bugs no Alpine)
+  const command =
+    `yt-dlp ` +
+    `-f "bestvideo[height<=360]+bestaudio/best[height<=360]" ` +
+    `--merge-output-format mp4 ` +
+    `-o "${outputTemplate}" ` +
+    `"${url}"`;
 
-  exec(command, async (error) => {
-    if (error) {
-      console.error(error);
-      return res.status(500).json({ error: "download failed" });
+  console.log("▶ Running command:", command);
+
+  exec(
+    command,
+    {
+      maxBuffer: 1024 * 1024 * 50, // 50 MB de buffer (yt-dlp gera muito log)
+    },
+    (error, stdout, stderr) => {
+      if (error) {
+        console.error("❌ yt-dlp ERROR:", error);
+        console.error("❌ STDERR:", stderr);
+
+        return res.status(500).json({
+          error: "download failed",
+          details: stderr || error.message,
+        });
+      }
+
+      console.log("✅ yt-dlp STDOUT:", stdout);
+
+      // localizar o arquivo baixado
+      let files;
+      try {
+        files = fs
+          .readdirSync(TMP_DIR)
+          .filter((f) => f.startsWith("video-") && f.endsWith(".mp4"));
+      } catch (fsError) {
+        console.error("❌ FS ERROR:", fsError);
+        return res.status(500).json({ error: "failed to read tmp dir" });
+      }
+
+      if (!files.length) {
+        return res.status(500).json({
+          error: "file not found after download",
+        });
+      }
+
+      const fileName = files[0];
+      const filePath = path.join(TMP_DIR, fileName);
+
+      console.log("📦 File ready:", filePath);
+
+      return res.json({
+        status: "ok",
+        fileName,
+        filePath,
+      });
     }
-
-    // pega o arquivo baixado
-    const files = fs.readdirSync(TMP_DIR).filter(f => f.startsWith("video-"));
-
-    if (!files.length) {
-      return res.status(500).json({ error: "file not found" });
-    }
-
-    const filePath = path.join(TMP_DIR, files[0]);
-
-    // 👉 Aqui você pode:
-    // 1. subir pro Google Drive
-    // 2. subir pro S3
-    // 3. OU devolver o arquivo (não recomendado p/ grandes)
-
-    res.json({
-      status: "ok",
-      filePath,
-      fileName: files[0]
-    });
-  });
+  );
 });
 
-app.get("/health", (_, res) => {
-  res.json({ status: "ok" });
-});
-
-app.listen(3000, () => {
-  console.log("Downloader running on port 3000");
+const PORT = 3000;
+app.listen(PORT, () => {
+  console.log(`🚀 Downloader running on port ${PORT}`);
 });
