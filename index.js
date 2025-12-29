@@ -35,7 +35,7 @@ app.post("/download", (req, res) => {
 
   const command =
     `${YT_DLP_BIN} ` +
-    `-f "bestvideo[height<=360]+bestaudio/best[height<=360]" ` +
+    `-f "bestvideo[height<=240]+bestaudio/best[height<=240]" ` +
     `--merge-output-format mp4 ` +
     `-o "${outputTemplate}" ` +
     `"${url}"`;
