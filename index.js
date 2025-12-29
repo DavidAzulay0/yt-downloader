@@ -42,12 +42,14 @@ app.post("/download", (req, res) => {
   const outputTemplate = `${TMP_DIR}/video-%(id)s.%(ext)s`;
 
   // ⚠️ comando em UMA linha (evita bugs no Alpine)
-  const command =
-    `yt-dlp ` +
-    `-f "bestvideo[height<=360]+bestaudio/best[height<=360]" ` +
-    `--merge-output-format mp4 ` +
-    `-o "${outputTemplate}" ` +
-    `"${url}"`;
+  const YT_DLP_BIN = "/usr/local/bin/yt-dlp";
+
+const command =
+  `${YT_DLP_BIN} -f "bestvideo[height<=360]+bestaudio/best[height<=360]" ` +
+  `--merge-output-format mp4 ` +
+  `-o "${outputTemplate}" ` +
+  `"${url}"`;
+
 
   console.log("▶ Running command:", command);
 
