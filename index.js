@@ -103,6 +103,16 @@ const command =
 });
 
 const PORT = 3000;
+
+import { execSync } from "child_process";
+
+try {
+  const version = execSync("/usr/local/bin/yt-dlp --version").toString();
+  console.log("✅ yt-dlp FOUND:", version);
+} catch (err) {
+  console.error("❌ yt-dlp NOT FOUND", err);
+}
+
 app.listen(PORT, () => {
   console.log(`🚀 Downloader running on port ${PORT}`);
 });
