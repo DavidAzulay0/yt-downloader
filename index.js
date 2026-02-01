@@ -33,12 +33,15 @@ app.post("/download", (req, res) => {
 
   const outputTemplate = `${TMP_DIR}/video-%(id)s.%(ext)s`;
 
-  const command =
-    `${YT_DLP_BIN} ` +
-    `-f "bestvideo[height<=240]+bestaudio/best[height<=240]" ` +
-    `--merge-output-format mp4 ` +
-    `-o "${outputTemplate}" ` +
-    `"${url}"`;
+  const command = `
+${YT_DLP_BIN}
+"${url}"
+-o "${outputTemplate}"
+-f "bv*[height<=240]/bv*/best"
+--merge-output-format mp4
+--no-playlist
+--no-check-certificate
+`.replace(/\s+/g, ' ').trim();
 
   exec(
     command,
