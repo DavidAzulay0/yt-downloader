@@ -1,6 +1,7 @@
 import express from "express";
 import { exec } from "child_process";
 import fs from "fs";
+import path from "path";
 
 const app = express();
 app.use(express.json());
@@ -31,7 +32,16 @@ app.post("/download", (req, res) => {
     return res.status(400).json({ error: "url is required" });
   }
 
-  const outputTemplate = `${TMP_DIR}/video-%(id)s.%(ext)s`;
+  // Ignorar Shorts explicitamente (evita 90% dos erros)
+  if (url.includes("/shorts/")) {
+    return res.status(422).json({
+      error: "shorts_not_supported",
+      details: "YouTube Shorts are ignored to keep the pipeline stable",
+      url,
+    });
+  }
+
+  const outputTemplate = path.join(TMP_DIR, "video-%(id)s.%(ext)s");
 
   const command = `
 ${YT_DLP_BIN}
@@ -41,14 +51,26 @@ ${YT_DLP_BIN}
 --merge-output-format mp4
 --no-playlist
 --no-check-certificate
-`.replace(/\s+/g, ' ').trim();
+--no-warnings
+`.replace(/\s+/g, " ").trim();
 
   exec(
     command,
-    { maxBuffer: 1024 * 1024 * 50 },
-    (error) => {
+    { maxBuffer: 1024 * 1024 * 100 },
+    (error, stdout, stderr) => {
       if (error) {
-        return res.status(500).json({ error: "download failed" });
+        const details =
+          stderr?.toString() ||
+          stdout?.toString() ||
+          error.message;
+
+        console.error("yt-dlp error:", details);
+
+        return res.status(500).json({
+          error: "download failed",
+          details,
+          url,
+        });
       }
 
       const files = fs
@@ -58,11 +80,14 @@ ${YT_DLP_BIN}
         );
 
       if (!files.length) {
-        return res.status(500).json({ error: "file not found" });
+        return res.status(500).json({
+          error: "file not found after download",
+          url,
+        });
       }
 
       const fileName = files[0];
-      const filePath = `${TMP_DIR}/${fileName}`;
+      const filePath = path.join(TMP_DIR, fileName);
 
       res.setHeader("Content-Type", "video/mp4");
       res.setHeader(
@@ -74,6 +99,11 @@ ${YT_DLP_BIN}
       stream.pipe(res);
 
       stream.on("close", () => {
+        fs.unlink(filePath, () => {});
+      });
+
+      stream.on("error", (err) => {
+        console.error("stream error:", err);
         fs.unlink(filePath, () => {});
       });
     }
